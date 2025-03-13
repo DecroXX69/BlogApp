@@ -24,18 +24,37 @@ export const getBlogBySlugAPI = async (slug) => {
 };
 
 // Create blog
-export const createBlogAPI = async (blogData) => {
-  const user = JSON.parse(localStorage.getItem('user'));
-  
-  const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${user.token}`,
-    },
-  };
 
-  const response = await axios.post(`${API_URL}/blogs`, blogData, config);
-  return response.data;
+export const createBlogAPI = async (blogData) => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    if (!user || !user.token) {
+      throw new Error('No authentication token found');
+    }
+    
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user.token}`,
+      },
+    };
+
+    console.log('Request URL:', `${API_URL}/blogs`);
+    console.log('Request Headers:', config.headers);
+    console.log('Request Data:', blogData);
+
+    const response = await axios.post(`${API_URL}/blogs`, blogData, config);
+    return response.data;
+  } catch (error) {
+    console.error('API Error Details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    });
+    throw error;
+  }
 };
 
 // Update blog
@@ -79,4 +98,29 @@ export const getUserBlogsAPI = async () => {
 
   const response = await axios.get(`${API_URL}/blogs/user`, config);
   return response.data;
+};
+
+// Add this to src/api/blogAPI.js
+export const testConnectionAPI = async () => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    if (!user || !user.token) {
+      throw new Error('No authentication token found');
+    }
+    
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user.token}`,
+      },
+    };
+    
+    const response = await axios.post(`${API_URL}/blogs/test-connection`, {}, config);
+    console.log('Test connection response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Test connection error:', error);
+    throw error;
+  }
 };

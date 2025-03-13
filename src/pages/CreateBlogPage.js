@@ -1,57 +1,65 @@
-// src/pages/CreateBlogPage.js
-import React, { useState, useContext, useRef } from 'react';
-import { Container } from 'react-bootstrap';
+import React, { useContext, useState } from 'react';
+import { Container, Card } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { BlogContext } from '../context/BlogContext';
 import BlogForm from '../components/blog/BlogForm';
 import Loader from '../components/common/Loader';
 import Message from '../components/common/Message';
-import { BlogContext } from '../context/BlogContext';
-import styles from '../styles/modules/Blog.module.css';
 
 const CreateBlogPage = () => {
+  const { createBlog } = useContext(BlogContext);
+  const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
-  const { createBlog, loading } = useContext(BlogContext);
-  const navigate = useNavigate();
-  
-  // Use a ref to prevent multiple submissions
-  const isSubmitting = useRef(false);
 
-  const handleCreateBlog = async (blogData) => {
-    // Prevent duplicate submissions
-    if (isSubmitting.current) return;
-    
+  const handleSubmit = async (blogData) => {
     try {
-      isSubmitting.current = true;
+      setSubmitting(true);
       setError(null);
       
+      // Create blog post
       const newBlog = await createBlog(blogData);
       
+      // Set success state
       setSuccess(true);
       
-      // Add small delay to show success message before redirecting
+      // Navigate after a short delay to ensure state updates complete
       setTimeout(() => {
-        navigate(`/blogs/${newBlog._id}`);
-      }, 1000);
+        navigate(`/blogs/${newBlog.slug}`);
+      }, 500);
+      
+      return newBlog;
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create blog');
-      setSuccess(false);
-      isSubmitting.current = false;
+      setError(err.message || 'Failed to create blog post');
+      throw err;
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <Container className={styles.pageContainer}>
-      <h1 className={styles.pageTitle}>Create New Blog</h1>
-      
-      {error && <Message variant="danger">{error}</Message>}
-      {success && <Message variant="success">Blog created successfully! Redirecting...</Message>}
-      
-      {loading && !success ? (
-        <Loader />
-      ) : (
-        <BlogForm onSubmit={handleCreateBlog} submitButtonText="Publish Blog" />
-      )}
+    <Container>
+      <Card className="mt-4 mb-4">
+        <Card.Header as="h1">Create New Blog</Card.Header>
+        <Card.Body>
+          {submitting ? (
+            <Loader />
+          ) : success ? (
+            <Message variant="success">
+              Blog post created successfully! Redirecting...
+            </Message>
+          ) : (
+            <>
+              {error && <Message variant="danger">{error}</Message>}
+              <BlogForm 
+                onSubmit={handleSubmit} 
+                submitButtonText="Publish Blog"
+              />
+            </>
+          )}
+        </Card.Body>
+      </Card>
     </Container>
   );
 };

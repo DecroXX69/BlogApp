@@ -1,221 +1,168 @@
-// src/components/blog/BlogForm.js
-import React, { useState, useRef, useEffect } from 'react';
-import { Form, Button, Row, Col } from 'react-bootstrap';
+// frontend/src/components/blog/BlogForm.js
+import React, { useState, useContext } from 'react';
+import { Form, Button, Card } from 'react-bootstrap';
+import { BlogContext } from '../../context/BlogContext';
+import Loader from '../common/Loader';
 import Message from '../common/Message';
 import styles from '../../styles/modules/Form.module.css';
+import { testConnectionAPI } from '../../api/blogAPI';
+const BlogForm = ({ blog, isEdit, onSubmitSuccess }) => {
+  const { loading, error, createBlog, updateBlog } = useContext(BlogContext);
 
-const BlogForm = ({ 
-  onSubmit, 
-  blog = null, 
-  submitButtonText = 'Publish Blog' 
-}) => {
-  // Form data state
   const [title, setTitle] = useState(blog?.title || '');
   const [content, setContent] = useState(blog?.content || '');
-  const [summary, setSummary] = useState(blog?.summary || '');
-  const [coverImage, setCoverImage] = useState(blog?.coverImage || '');
-  const [category, setCategory] = useState(blog?.category || '');
+  const [excerpt, setExcerpt] = useState(blog?.excerpt || '');
+  const [featuredImage, setFeaturedImage] = useState(blog?.featuredImage || '');
   const [tags, setTags] = useState(blog?.tags?.join(', ') || '');
-  const [isPublished, setIsPublished] = useState(blog?.isPublished || false);
-  
-  // Form submission state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState(null);
-  const [submittedOnce, setSubmittedOnce] = useState(false);
-  
-  // Use a ref to track if component is mounted
-  const isMounted = useRef(true);
-  
-  // Track if the form is dirty (has changed since initial load)
-  const [isDirty, setIsDirty] = useState(false);
-  
-  // Categories list - replace with your actual categories
-  const categories = ['Technology', 'Health', 'Business', 'Entertainment', 'Other'];
-  
-  // Handle form input changes and track dirty state
-  const handleInputChange = (setter) => (e) => {
-    setter(e.target.value);
-    if (!isDirty) setIsDirty(true);
+  const [published, setPublished] = useState(blog?.published || false);
+  const [validationError, setValidationError] = useState('');
+
+
+
+  const testConnection = async () => {
+    try {
+      const result = await testConnectionAPI();
+      console.log('Connection test successful:', result);
+      return result;
+    } catch (err) {
+      console.error('Connection test failed:', err);
+    }
   };
+
+
   
-  // Handle checkbox changes
-  const handleCheckboxChange = (e) => {
-    setIsPublished(e.target.checked);
-    if (!isDirty) setIsDirty(true);
-  };
-  
-  // Handle form submission with debounce to prevent double-clicks
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Prevent multiple submissions
-    if (isSubmitting) return;
-    
-    setSubmittedOnce(true);
-    
-    // Validate form
-    if (!title.trim()) {
-      setFormError('Title is required');
+    // Form validation
+    if (!title || !content || !excerpt) {
+      setValidationError('Title, content, and excerpt are required');
       return;
     }
     
-    if (!content.trim()) {
-      setFormError('Content is required');
-      return;
-    }
+    setValidationError('');
+    
+    // Create a more detailed blog data object
+    const blogData = {
+      title: title.trim(),
+      content: content.trim(),
+      excerpt: excerpt.trim(),
+      featuredImage: featuredImage || '',
+      tags: tags || '',
+      published: published || false,
+    };
+    
+    console.log("Sending blog data:", blogData);
     
     try {
-      setFormError(null);
-      setIsSubmitting(true);
+      if (isEdit) {
+        await updateBlog(blog._id, blogData);
+      } else {
+        await createBlog(blogData);
+      }
       
-      // Process tags into array
-      const processedTags = tags
-        .split(',')
-        .map(tag => tag.trim())
-        .filter(tag => tag !== '');
-      
-      // Create blog object
-      const blogData = {
-        title,
-        content,
-        summary,
-        coverImage,
-        category,
-        tags: processedTags,
-        isPublished
-      };
-      
-      // Call the onSubmit prop with the blog data
-      await onSubmit(blogData);
-      
-      // Reset dirty state after successful submission
-      setIsDirty(false);
+      if (onSubmitSuccess) {
+        onSubmitSuccess();
+      }
     } catch (err) {
-      if (isMounted.current) {
-        setFormError(err.message || 'Failed to submit blog');
-      }
-    } finally {
-      if (isMounted.current) {
-        setIsSubmitting(false);
-      }
+      console.error('Error submitting blog:', err);
+      console.error('Error details:', err.response?.data);
     }
   };
-  
-  // Clean up when component unmounts
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-  
+
   return (
-    <Form className={styles.form} onSubmit={handleSubmit}>
-      {formError && submittedOnce && (
-        <Message variant="danger">{formError}</Message>
-      )}
-      
-      <Form.Group className="mb-3">
-        <Form.Label>Title</Form.Label>
-        <Form.Control
-          type="text"
-          placeholder="Enter blog title"
-          value={title}
-          onChange={handleInputChange(setTitle)}
-          disabled={isSubmitting}
-          required
-        />
-      </Form.Group>
-      
-      <Form.Group className="mb-3">
-        <Form.Label>Summary</Form.Label>
-        <Form.Control
-          as="textarea"
-          rows={2}
-          placeholder="Brief summary of your blog"
-          value={summary}
-          onChange={handleInputChange(setSummary)}
-          disabled={isSubmitting}
-        />
-      </Form.Group>
-      
-      <Form.Group className="mb-3">
-        <Form.Label>Content</Form.Label>
-        <Form.Control
-          as="textarea"
-          rows={10}
-          placeholder="Write your blog content here..."
-          value={content}
-          onChange={handleInputChange(setContent)}
-          disabled={isSubmitting}
-          required
-        />
-        <Form.Text className="text-muted">
-          You can use markdown formatting if needed
-        </Form.Text>
-      </Form.Group>
-      
-      <Row className="mb-3">
-        <Col md={6}>
-          <Form.Group>
-            <Form.Label>Cover Image URL</Form.Label>
+    <Card className="shadow-sm">
+      <Card.Body className="p-4">
+        <h2 className="mb-4">{isEdit ? 'Edit Blog' : 'Create New Blog'}</h2>
+        
+        {validationError && <Message variant="danger">{validationError}</Message>}
+        {error && <Message variant="danger">{error}</Message>}
+        
+        <Form onSubmit={handleSubmit} className={styles.form}>
+          <Form.Group className="mb-3" controlId="blogTitle">
+            <Form.Label>Title</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter blog title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className={styles.formControl}
+            />
+          </Form.Group>
+          
+          <Form.Group className="mb-3" controlId="blogExcerpt">
+            <Form.Label>Excerpt</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              placeholder="Write a short excerpt"
+              value={excerpt}
+              onChange={(e) => setExcerpt(e.target.value)}
+              className={styles.formControl}
+            />
+          </Form.Group>
+          
+          <Form.Group className="mb-3" controlId="blogContent">
+            <Form.Label>Content</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={10}
+              placeholder="Write your blog content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className={styles.formControl}
+            />
+          </Form.Group>
+          
+          <Form.Group className="mb-3" controlId="blogImage">
+            <Form.Label>Featured Image URL</Form.Label>
             <Form.Control
               type="text"
               placeholder="Enter image URL"
-              value={coverImage}
-              onChange={handleInputChange(setCoverImage)}
-              disabled={isSubmitting}
+              value={featuredImage}
+              onChange={(e) => setFeaturedImage(e.target.value)}
+              className={styles.formControl}
             />
           </Form.Group>
-        </Col>
-        <Col md={6}>
-          <Form.Group>
-            <Form.Label>Category</Form.Label>
-            <Form.Select
-              value={category}
-              onChange={handleInputChange(setCategory)}
-              disabled={isSubmitting}
-            >
-              <option value="">Select a category</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </Form.Select>
+          
+          <Form.Group className="mb-3" controlId="blogTags">
+            <Form.Label>Tags</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter tags separated by commas"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              className={styles.formControl}
+            />
+            <Form.Text className="text-muted">
+              Example: technology, programming, web development
+            </Form.Text>
           </Form.Group>
-        </Col>
-      </Row>
-      
-      <Form.Group className="mb-3">
-        <Form.Label>Tags (comma separated)</Form.Label>
-        <Form.Control
-          type="text"
-          placeholder="technology, javascript, react"
-          value={tags}
-          onChange={handleInputChange(setTags)}
-          disabled={isSubmitting}
-        />
-      </Form.Group>
-      
-      <Form.Group className="mb-4">
-        <Form.Check
-          type="checkbox"
-          label="Publish immediately"
-          checked={isPublished}
-          onChange={handleCheckboxChange}
-          disabled={isSubmitting}
-        />
-      </Form.Group>
-      
-      <div className="d-flex justify-content-end">
-        <Button 
-          type="submit" 
-          variant="primary" 
-          disabled={isSubmitting}
-          className={styles.submitButton}
-        >
-          {isSubmitting ? 'Publishing...' : submitButtonText}
-        </Button>
-      </div>
-    </Form>
+          
+          <Form.Group className="mb-4" controlId="blogPublished">
+            <Form.Check
+              type="checkbox"
+              label="Publish blog"
+              checked={published}
+              onChange={(e) => setPublished(e.target.checked)}
+              className={styles.formCheck}
+            />
+          </Form.Group>
+          
+          <Button variant="primary" type="submit" className={styles.submitButton} disabled={loading}>
+            {loading ? 'Saving...' : isEdit ? 'Update Blog' : 'Create Blog'}
+          </Button>
+
+          <Button 
+  variant="secondary" 
+  onClick={testConnection} 
+  className="mt-2"
+>
+  Test Connection
+</Button>
+        </Form>
+      </Card.Body>
+    </Card>
   );
 };
 

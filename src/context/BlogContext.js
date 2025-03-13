@@ -1,5 +1,4 @@
-// frontend/src/context/BlogContext.js
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import { 
   getBlogsAPI, 
   getBlogByIdAPI, 
@@ -25,8 +24,8 @@ export const BlogProvider = ({ children }) => {
   
   const { user } = useContext(AuthContext);
 
-  // Get all blogs
-  const getBlogs = async (keyword = '', pageNumber = 1, publishedOnly = true) => {
+  // Get all blogs - using useCallback to prevent unnecessary recreation
+  const getBlogs = useCallback(async (keyword = '', pageNumber = 1, publishedOnly = true) => {
     try {
       setLoading(true);
       setError(null);
@@ -42,10 +41,10 @@ export const BlogProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Get blog by ID
-  const getBlogById = async (id) => {
+  const getBlogById = useCallback(async (id) => {
     try {
       setLoading(true);
       setError(null);
@@ -58,10 +57,10 @@ export const BlogProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Get blog by slug
-  const getBlogBySlug = async (slug) => {
+  const getBlogBySlug = useCallback(async (slug) => {
     try {
       setLoading(true);
       setError(null);
@@ -74,17 +73,23 @@ export const BlogProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Create blog
   const createBlog = async (blogData) => {
     try {
       setLoading(true);
       setError(null);
+      console.log("BlogData being sent:", blogData); // Log the data
       const data = await createBlogAPI(blogData);
-      setUserBlogs([data, ...userBlogs]);
+      console.log("Response received:", data); // Log the response
+      
+      // Update userBlogs in a way that prevents state race conditions
+      setUserBlogs(prevUserBlogs => [data, ...prevUserBlogs]);
+      
       return data;
     } catch (err) {
+      console.error("Full error object:", err); // Log the complete error
       setError(err.response?.data?.message || 'Failed to create blog');
       throw err;
     } finally {
@@ -92,26 +97,27 @@ export const BlogProvider = ({ children }) => {
     }
   };
 
+  // Update blog
   const updateBlog = async (id, blogData) => {
     try {
       setLoading(true);
       setError(null);
       const data = await updateBlogAPI(id, blogData);
       
-      // Update userBlogs state
-      setUserBlogs(userBlogs.map(blog => 
-        blog._id === id ? data : blog
-      ));
+      // Update userBlogs state using functional updates to prevent race conditions
+      setUserBlogs(prevUserBlogs => 
+        prevUserBlogs.map(blog => blog._id === id ? data : blog)
+      );
       
-      // Update blogs state if the blog exists there
-      setBlogs(blogs.map(blog => 
-        blog._id === id ? data : blog
-      ));
+      // Update blogs state using functional updates
+      setBlogs(prevBlogs => 
+        prevBlogs.map(blog => blog._id === id ? data : blog)
+      );
       
       // Update currentBlog if it's the same blog
-      if (currentBlog && currentBlog._id === id) {
-        setCurrentBlog(data);
-      }
+      setCurrentBlog(prevCurrentBlog => 
+        prevCurrentBlog && prevCurrentBlog._id === id ? data : prevCurrentBlog
+      );
       
       return data;
     } catch (err) {
@@ -129,16 +135,22 @@ export const BlogProvider = ({ children }) => {
       setError(null);
       await deleteBlogAPI(id);
       
-      // Remove blog from userBlogs state
-      setUserBlogs(userBlogs.filter(blog => blog._id !== id));
+      // Remove blog from userBlogs state using functional updates
+      setUserBlogs(prevUserBlogs => 
+        prevUserBlogs.filter(blog => blog._id !== id)
+      );
       
       // Remove blog from blogs state
-      setBlogs(blogs.filter(blog => blog._id !== id));
+      setBlogs(prevBlogs => 
+        prevBlogs.filter(blog => blog._id !== id)
+      );
       
       // Clear currentBlog if it's the same blog
-      if (currentBlog && currentBlog._id === id) {
-        setCurrentBlog(null);
-      }
+      setCurrentBlog(prevCurrentBlog => 
+        prevCurrentBlog && prevCurrentBlog._id === id ? null : prevCurrentBlog
+      );
+      
+      return { success: true };
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to delete blog');
       throw err;
@@ -148,8 +160,8 @@ export const BlogProvider = ({ children }) => {
   };
 
   // Get user blogs
-  const getUserBlogs = async () => {
-    if (!user) return;
+  const getUserBlogs = useCallback(async () => {
+    if (!user) return [];
     
     try {
       setLoading(true);
@@ -163,12 +175,34 @@ export const BlogProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   // Clear current blog
   const clearCurrentBlog = () => {
     setCurrentBlog(null);
   };
+
+  // Load user blogs when user changes
+  useEffect(() => {
+    if (user) {
+      getUserBlogs().catch(err => {
+        console.error('Failed to load user blogs:', err);
+      });
+    } else {
+      setUserBlogs([]);
+    }
+  }, [user, getUserBlogs]);
+
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   return (
     <BlogContext.Provider
