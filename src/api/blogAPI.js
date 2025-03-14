@@ -1,126 +1,150 @@
-// frontend/src/api/blogAPI.js
-import axios from 'axios';
+import { ethers } from "ethers";
+import PinataSDK from "@pinata/sdk";
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const CONTRACT_ADDRESS = "YOUR_FUJI_CONTRACT_ADDRESS"; // From deployment
+const CONTRACT_ABI = [/* ABI from artifacts */];
 
-// Get all blogs
-export const getBlogsAPI = async (keyword = '', pageNumber = 1, publishedOnly = true) => {
-  const response = await axios.get(
-    `${API_URL}/blogs?keyword=${keyword}&pageNumber=${pageNumber}&published=${publishedOnly}`
-  );
-  return response.data;
-};
+const pinata = new PinataSDK("YOUR_PINATA_API_KEY", "YOUR_PINATA_SECRET_KEY");
 
-// Get blog by ID
-export const getBlogByIdAPI = async (id) => {
-  const response = await axios.get(`${API_URL}/blogs/${id}`);
-  return response.data;
-};
+// Initialize provider for Avalanche Fuji
+const provider = new ethers.providers.Web3Provider(window.ethereum);
+const signer = provider.getSigner();
+const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-// Get blog by slug
-export const getBlogBySlugAPI = async (slug) => {
-  const response = await axios.get(`${API_URL}/blogs/slug/${slug}`);
-  return response.data;
-};
-
-// Create blog
-
-export const createBlogAPI = async (blogData) => {
+// Connect wallet function
+export const connectWallet = async () => {
   try {
-    const user = JSON.parse(localStorage.getItem('user'));
-    
-    if (!user || !user.token) {
-      throw new Error('No authentication token found');
-    }
-    
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${user.token}`,
-      },
-    };
+    // Request account access
+    await provider.send("eth_requestAccounts", []);
 
-    console.log('Request URL:', `${API_URL}/blogs`);
-    console.log('Request Headers:', config.headers);
-    console.log('Request Data:', blogData);
-
-    const response = await axios.post(`${API_URL}/blogs`, blogData, config);
-    return response.data;
-  } catch (error) {
-    console.error('API Error Details:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message
+    // Switch to Avalanche Fuji network
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: "0xa869" }], // Fuji Chain ID in hex (43113)
     });
+
+    const address = await signer.getAddress();
+    return { message: "Wallet connected", address };
+  } catch (error) {
+    if (error.code === 4902) {
+      // Chain not added to MetaMask, add it
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: "0xa869",
+            chainName: "Avalanche Fuji C-Chain",
+            rpcUrls: ["https://api.avax-test.network/ext/bc/C/rpc"],
+            nativeCurrency: {
+              name: "AVAX",
+              symbol: "AVAX",
+              decimals: 18,
+            },
+            blockExplorerUrls: ["https://testnet.snowtrace.io"],
+          },
+        ],
+      });
+      return connectWallet(); // Retry after adding chain
+    }
     throw error;
   }
 };
 
+// Upload content to IPFS
+const uploadToIPFS = async (data) => {
+  const result = await pinata.pinJSONToIPFS(data);
+  return result.IpfsHash;
+};
+
+// Get all blogs
+export const getBlogsAPI = async (publishedOnly = true) => {
+  const allBlogs = await contract.getAllBlogs();
+  return allBlogs.filter(blog => !publishedOnly || blog.published);
+};
+
+// Get blog by ID
+export const getBlogByIdAPI = async (id) => {
+  const blog = await contract.getBlog(id);
+  return {
+    id: blog.id.toString(),
+    author: blog.author,
+    title: blog.title,
+    excerpt: blog.excerpt,
+    contentHash: blog.contentHash,
+    featuredImageHash: blog.featuredImageHash,
+    tags: blog.tags,
+    published: blog.published,
+    createdAt: blog.createdAt.toString(),
+    publishedAt: blog.publishedAt.toString(),
+  };
+};
+
+// Create blog
+export const createBlogAPI = async (blogData) => {
+  const { title, content, excerpt, featuredImage, tags, published } = blogData;
+
+  // Upload content and image to IPFS
+  const contentHash = await uploadToIPFS({ content });
+  const featuredImageHash = featuredImage ? await uploadToIPFS({ image: featuredImage }) : '';
+
+  const tx = await contract.createBlog(
+    title,
+    excerpt,
+    contentHash,
+    featuredImageHash,
+    tags.split(',').map(tag => tag.trim()),
+    published
+  );
+  await tx.wait();
+  return { id: (await contract.blogCount()).toString() };
+};
+
 // Update blog
 export const updateBlogAPI = async (id, blogData) => {
-  const user = JSON.parse(localStorage.getItem('user'));
-  
-  const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${user.token}`,
-    },
-  };
+  const { title, content, excerpt, featuredImage, tags, published } = blogData;
 
-  const response = await axios.put(`${API_URL}/blogs/${id}`, blogData, config);
-  return response.data;
+  const contentHash = await uploadToIPFS({ content });
+  const featuredImageHash = featuredImage ? await uploadToIPFS({ image: featuredImage }) : '';
+
+  const tx = await contract.updateBlog(
+    id,
+    title,
+    excerpt,
+    contentHash,
+    featuredImageHash,
+    tags.split(',').map(tag => tag.trim()),
+    published
+  );
+  await tx.wait();
+  return { id };
 };
 
 // Delete blog
 export const deleteBlogAPI = async (id) => {
-  const user = JSON.parse(localStorage.getItem('user'));
-  
-  const config = {
-    headers: {
-      Authorization: `Bearer ${user.token}`,
-    },
-  };
-
-  const response = await axios.delete(`${API_URL}/blogs/${id}`, config);
-  return response.data;
+  const tx = await contract.deleteBlog(id);
+  await tx.wait();
+  return { message: 'Blog removed' };
 };
 
 // Get user blogs
 export const getUserBlogsAPI = async () => {
-  const user = JSON.parse(localStorage.getItem('user'));
-  
-  const config = {
-    headers: {
-      Authorization: `Bearer ${user.token}`,
-    },
-  };
-
-  const response = await axios.get(`${API_URL}/blogs/user`, config);
-  return response.data;
+  const address = await signer.getAddress();
+  const blogIds = await contract.getUserBlogs(address);
+  const blogs = await Promise.all(
+    blogIds.map(async (id) => await getBlogByIdAPI(id.toString()))
+  );
+  return blogs;
 };
 
-// Add this to src/api/blogAPI.js
+// Test connection
 export const testConnectionAPI = async () => {
   try {
-    const user = JSON.parse(localStorage.getItem('user'));
-    
-    if (!user || !user.token) {
-      throw new Error('No authentication token found');
-    }
-    
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${user.token}`,
-      },
-    };
-    
-    const response = await axios.post(`${API_URL}/blogs/test-connection`, {}, config);
-    console.log('Test connection response:', response.data);
-    return response.data;
+    await provider.send('eth_requestAccounts', []);
+    const address = await signer.getAddress();
+    console.log('Connected wallet:', address);
+    return { message: 'Connected successfully', address };
   } catch (error) {
-    console.error('Test connection error:', error);
+    console.error('Connection error:', error);
     throw error;
   }
 };
