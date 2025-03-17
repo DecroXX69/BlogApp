@@ -19,7 +19,7 @@ const Header = () => {
       <Navbar bg="dark" variant="dark" expand="lg" className={styles.navbar}>
         <Container>
           <Link to="/">
-            <Navbar.Brand className={styles.brand}>MERN Blog</Navbar.Brand>
+            <Navbar.Brand className={styles.brand}>Rushi's GOD Tier Blog App</Navbar.Brand>
           </Link>
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
           <Navbar.Collapse id="basic-navbar-nav">

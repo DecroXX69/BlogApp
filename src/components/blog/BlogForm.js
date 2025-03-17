@@ -1,23 +1,30 @@
 // frontend/src/components/blog/BlogForm.js
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Form, Button, Card } from 'react-bootstrap';
 import { BlogContext } from '../../context/BlogContext';
 import Loader from '../common/Loader';
 import Message from '../common/Message';
 import styles from '../../styles/modules/Form.module.css';
 import { testConnectionAPI } from '../../api/blogAPI';
+
 const BlogForm = ({ blog, isEdit, onSubmitSuccess }) => {
-  const { loading, error, createBlog, updateBlog } = useContext(BlogContext);
+  const { loading, error, createBlog, updateBlog, getCategories, categories } = useContext(BlogContext);
 
   const [title, setTitle] = useState(blog?.title || '');
   const [content, setContent] = useState(blog?.content || '');
   const [excerpt, setExcerpt] = useState(blog?.excerpt || '');
   const [featuredImage, setFeaturedImage] = useState(blog?.featuredImage || '');
   const [tags, setTags] = useState(blog?.tags?.join(', ') || '');
+  const [category, setCategory] = useState(blog?.category || 'Uncategorized');
   const [published, setPublished] = useState(blog?.published || false);
   const [validationError, setValidationError] = useState('');
 
-
+  // Fetch categories when component mounts
+  useEffect(() => {
+    getCategories().catch(err => {
+      console.error('Failed to fetch categories:', err);
+    });
+  }, [getCategories]);
 
   const testConnection = async () => {
     try {
@@ -29,8 +36,6 @@ const BlogForm = ({ blog, isEdit, onSubmitSuccess }) => {
     }
   };
 
-
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -49,6 +54,7 @@ const BlogForm = ({ blog, isEdit, onSubmitSuccess }) => {
       excerpt: excerpt.trim(),
       featuredImage: featuredImage || '',
       tags: tags || '',
+      category: category || 'Uncategorized',
       published: published || false,
     };
     
@@ -125,6 +131,24 @@ const BlogForm = ({ blog, isEdit, onSubmitSuccess }) => {
             />
           </Form.Group>
           
+          <Form.Group className="mb-3" controlId="blogCategory">
+            <Form.Label>Category</Form.Label>
+            <Form.Select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className={styles.formControl}
+            >
+              <option value="Uncategorized">Uncategorized</option>
+              {categories && categories.length > 0 && 
+                categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))
+              }
+            </Form.Select>
+          </Form.Group>
+          
           <Form.Group className="mb-3" controlId="blogTags">
             <Form.Label>Tags</Form.Label>
             <Form.Control
@@ -147,6 +171,11 @@ const BlogForm = ({ blog, isEdit, onSubmitSuccess }) => {
               onChange={(e) => setPublished(e.target.checked)}
               className={styles.formCheck}
             />
+            {isEdit && blog?.published && (
+              <Form.Text className="text-muted">
+                Unpublishing your blog will make it inaccessible via shareable links.
+              </Form.Text>
+            )}
           </Form.Group>
           
           <Button variant="primary" type="submit" className={styles.submitButton} disabled={loading}>
@@ -154,12 +183,12 @@ const BlogForm = ({ blog, isEdit, onSubmitSuccess }) => {
           </Button>
 
           <Button 
-  variant="secondary" 
-  onClick={testConnection} 
-  className="mt-2"
->
-  Test Connection
-</Button>
+            variant="secondary" 
+            onClick={testConnection} 
+            className="mt-2 ms-2"
+          >
+            Test Connection
+          </Button>
         </Form>
       </Card.Body>
     </Card>

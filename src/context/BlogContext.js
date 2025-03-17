@@ -3,10 +3,12 @@ import {
   getBlogsAPI, 
   getBlogByIdAPI, 
   getBlogBySlugAPI,
+  getBlogByShareableLinkAPI,
   createBlogAPI, 
   updateBlogAPI, 
   deleteBlogAPI,
-  getUserBlogsAPI 
+  getUserBlogsAPI,
+  getCategoriesAPI
 } from '../api/blogAPI';
 import { AuthContext } from './AuthContext';
 
@@ -16,6 +18,7 @@ export const BlogProvider = ({ children }) => {
   const [blogs, setBlogs] = useState([]);
   const [currentBlog, setCurrentBlog] = useState(null);
   const [userBlogs, setUserBlogs] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
@@ -25,11 +28,11 @@ export const BlogProvider = ({ children }) => {
   const { user } = useContext(AuthContext);
 
   // Get all blogs - using useCallback to prevent unnecessary recreation
-  const getBlogs = useCallback(async (keyword = '', pageNumber = 1, publishedOnly = true) => {
+  const getBlogs = useCallback(async (keyword = '', pageNumber = 1, publishedOnly = true, category = '') => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getBlogsAPI(keyword, pageNumber, publishedOnly);
+      const data = await getBlogsAPI(keyword, pageNumber, publishedOnly, category);
       setBlogs(data.blogs);
       setPage(data.page);
       setPages(data.pages);
@@ -69,6 +72,38 @@ export const BlogProvider = ({ children }) => {
       return data;
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch blog');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Get blog by shareable link
+  const getBlogByShareableLink = useCallback(async (shareableLink) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getBlogByShareableLinkAPI(shareableLink);
+      setCurrentBlog(data);
+      return data;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch blog');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Get all categories
+  const getCategories = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getCategoriesAPI();
+      setCategories(data);
+      return data;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch categories');
       throw err;
     } finally {
       setLoading(false);
@@ -177,6 +212,28 @@ export const BlogProvider = ({ children }) => {
     }
   }, [user]);
 
+  // Copy blog shareable link to clipboard
+  const copyShareableLink = (blog) => {
+    if (!blog || !blog.shareableLink) {
+      setError('No shareable link available');
+      return false;
+    }
+    
+    const baseUrl = window.location.origin;
+    const shareableUrl = `${baseUrl}/blogs/share/${blog.shareableLink}`;
+    
+    navigator.clipboard.writeText(shareableUrl)
+      .then(() => {
+        // You might want to show a success message here
+        return true;
+      })
+      .catch(err => {
+        setError('Failed to copy link to clipboard');
+        console.error('Failed to copy link:', err);
+        return false;
+      });
+  };
+
   // Clear current blog
   const clearCurrentBlog = () => {
     setCurrentBlog(null);
@@ -192,6 +249,13 @@ export const BlogProvider = ({ children }) => {
       setUserBlogs([]);
     }
   }, [user, getUserBlogs]);
+
+  // Load categories on initial render
+  useEffect(() => {
+    getCategories().catch(err => {
+      console.error('Failed to load categories:', err);
+    });
+  }, [getCategories]);
 
   // Clear error after 5 seconds
   useEffect(() => {
@@ -210,6 +274,7 @@ export const BlogProvider = ({ children }) => {
         blogs,
         userBlogs,
         currentBlog,
+        categories,
         loading,
         error,
         page,
@@ -218,10 +283,13 @@ export const BlogProvider = ({ children }) => {
         getBlogs,
         getBlogById,
         getBlogBySlug,
+        getBlogByShareableLink,
+        getCategories,
         createBlog,
         updateBlog,
         deleteBlog,
         getUserBlogs,
+        copyShareableLink,
         clearCurrentBlog
       }}
     >

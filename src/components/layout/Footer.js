@@ -6,7 +6,7 @@ const Footer = () => {
   return (
     <footer className={`py-3 mt-4 bg-dark text-white ${styles.footer}`}>
       <div className="container text-center">
-        <p className="mb-0">&copy; {new Date().getFullYear()} MERN Blog. All rights reserved.</p>
+        <p className="mb-0">&copy; {new Date().getFullYear()} Rushikesh's GOD Tier Blogs. All rights reserved to Rushikesh only.</p>
       </div>
     </footer>
   );
